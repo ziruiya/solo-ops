@@ -4,12 +4,14 @@ namespace Tests\Feature;
 
 use App\Models\Asset;
 use App\Models\AssetComponent;
+use App\Models\AuditEvent;
 use App\Models\ChangeApproval;
 use App\Models\ChecklistItem;
 use App\Models\Incident;
 use App\Models\Role;
 use App\Models\UpdatePlan;
 use App\Models\User;
+use App\Models\WorkRecord;
 use App\Services\UpdatePlanTransition;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -530,5 +532,125 @@ class UpdatePlanWorkflowTest extends TestCase
         $this->get('/update-plans?view=status')->assertSee('DRAFT');
         $this->get('/update-plans?view=time')->assertSee('2026-11-21');
         $this->get(route('update-plans.show', $plan))->assertSeeInOrder(['AI調査テンプレート（DEMO）', '調査質問の例', '出力形式', '人が内容を確認しました']);
+    }
+
+    /** @return array{UpdatePlan, ChangeApproval} */
+    private function executingPlan(User $operator): array
+    {
+        [$plan, $approval] = $this->approvedPlan($operator);
+        $executor = $this->operator();
+        $this->actingAs($operator)->post(route('update-plans.transition', $plan), ['status' => 'SCHEDULED'])
+            ->assertRedirect()->assertSessionHasNoErrors();
+        $this->actingAs($executor)->post(route('update-plans.transition', $plan), ['status' => 'EXECUTING'])
+            ->assertRedirect()->assertSessionHasNoErrors();
+        $this->actingAs($operator);
+
+        return [$plan->refresh(), $approval];
+    }
+
+    private function transitionAs(UpdatePlan $plan, string $status, User $actor): void
+    {
+        $this->actingAs($actor)->post(route('update-plans.transition', $plan), ['status' => $status])
+            ->assertRedirect()->assertSessionHasNoErrors();
+    }
+
+    public function test_r1_t1_critical_change_is_rejected_while_executing(): void
+    {
+        $operator = $this->operator();
+        [$plan] = $this->executingPlan($operator);
+        $this->assertNotNull($plan->actual_start_at);
+
+        $this->actingAs($operator)->putJson(route('update-plans.update', $plan), ['target_version' => '9.9'])
+            ->assertUnprocessable()->assertJsonValidationErrors('target_version');
+
+        $this->assertDatabaseHas('update_plans', ['id' => $plan->id, 'status' => 'EXECUTING', 'target_version' => '2.0']);
+    }
+
+    public function test_r1_t2_critical_change_is_rejected_while_verifying(): void
+    {
+        $operator = $this->operator();
+        [$plan] = $this->executingPlan($operator);
+        $this->transitionAs($plan, 'VERIFYING', $operator);
+
+        $this->actingAs($operator)->putJson(route('update-plans.update', $plan), ['impact' => 'Rewritten during verification'])
+            ->assertUnprocessable()->assertJsonValidationErrors('impact');
+
+        $this->assertDatabaseHas('update_plans', ['id' => $plan->id, 'status' => 'VERIFYING', 'impact' => 'User impact assessed']);
+    }
+
+    public function test_r1_t3_critical_change_is_rejected_in_failure_and_rollback_states(): void
+    {
+        $operator = $this->operator();
+
+        [$failed] = $this->executingPlan($operator);
+        $this->transitionAs($failed, 'FAILED', $operator);
+        $this->actingAs($operator)->putJson(route('update-plans.update', $failed), ['target_version' => '9.9'])
+            ->assertUnprocessable()->assertJsonValidationErrors('target_version');
+        $this->assertSame('FAILED', $failed->fresh()->status);
+
+        [$required] = $this->executingPlan($operator);
+        $this->transitionAs($required, 'ROLLBACK_REQUIRED', $operator);
+        $this->actingAs($operator)->putJson(route('update-plans.update', $required), ['rollback_plan' => 'Rewritten rollback'])
+            ->assertUnprocessable()->assertJsonValidationErrors('rollback_plan');
+        $this->assertSame('ROLLBACK_REQUIRED', $required->fresh()->status);
+
+        [$rollingBack] = $this->executingPlan($operator);
+        $this->transitionAs($rollingBack, 'ROLLBACK_REQUIRED', $operator);
+        $this->transitionAs($rollingBack, 'ROLLING_BACK', $operator);
+        $this->actingAs($operator)->putJson(route('update-plans.update', $rollingBack), ['operator_id' => (string) $this->operator()->id])
+            ->assertUnprocessable()->assertJsonValidationErrors('operator_id');
+        $this->assertSame('ROLLING_BACK', $rollingBack->fresh()->status);
+    }
+
+    public function test_r1_t4_critical_change_is_rejected_when_blocked_after_execution_started(): void
+    {
+        $operator = $this->operator();
+        [$plan] = $this->executingPlan($operator);
+        $this->transitionAs($plan, 'BLOCKED', $operator);
+        $plan->refresh();
+        $this->assertSame('EXECUTING', $plan->blocked_from_status);
+        $this->assertNotNull($plan->actual_start_at);
+
+        $this->actingAs($operator)->putJson(route('update-plans.update', $plan), ['target_version' => '9.9'])
+            ->assertUnprocessable()->assertJsonValidationErrors('target_version');
+
+        $this->assertDatabaseHas('update_plans', [
+            'id' => $plan->id, 'status' => 'BLOCKED', 'blocked_from_status' => 'EXECUTING', 'target_version' => '2.0',
+        ]);
+    }
+
+    public function test_r1_t5_critical_change_before_execution_still_invalidates_approval_when_blocked(): void
+    {
+        $operator = $this->operator();
+        [$plan, $approval] = $this->approvedPlan($operator);
+        $this->post(route('update-plans.transition', $plan), ['status' => 'BLOCKED'])
+            ->assertRedirect()->assertSessionHasNoErrors();
+        $plan->refresh();
+        $this->assertSame('APPROVED', $plan->blocked_from_status);
+        $this->assertNull($plan->actual_start_at);
+
+        $this->put(route('update-plans.update', $plan), ['target_version' => '2.1'])
+            ->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->assertApprovalInvalidated($approval, $operator, ['target_version' => '2.0'], ['target_version' => '2.1'], 'BLOCKED');
+    }
+
+    public function test_r1_t6_rejected_critical_change_has_no_database_side_effects(): void
+    {
+        $operator = $this->operator();
+        [$plan] = $this->executingPlan($operator);
+        $planRow = $plan->fresh()->getRawOriginal();
+        $approvalCount = ChangeApproval::where('update_plan_id', $plan->id)->count();
+        $auditCount = AuditEvent::count();
+        $workRecordCount = WorkRecord::where('update_plan_id', $plan->id)->count();
+
+        $this->actingAs($operator)->putJson(route('update-plans.update', $plan), [
+            'target_version' => '9.9', 'planned_end_at' => '2026-11-21 05:00:00',
+        ])->assertUnprocessable();
+
+        $this->assertSame($planRow, $plan->fresh()->getRawOriginal());
+        $this->assertSame($approvalCount, ChangeApproval::where('update_plan_id', $plan->id)->count());
+        $this->assertSame($auditCount, AuditEvent::count());
+        $this->assertSame($workRecordCount, WorkRecord::where('update_plan_id', $plan->id)->count());
     }
 }

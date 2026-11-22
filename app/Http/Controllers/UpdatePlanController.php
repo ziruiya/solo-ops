@@ -24,6 +24,10 @@ class UpdatePlanController extends Controller
         'backup_reference', 'backup_verified', 'restore_test_passed',
     ];
 
+    private const POST_IMPLEMENTATION_STATES = [
+        'EXECUTING', 'VERIFYING', 'FAILED', 'ROLLBACK_REQUIRED', 'ROLLING_BACK', 'ROLLBACK_FAILED',
+    ];
+
     public function index(Request $request)
     {
         $plans = UpdatePlan::with('assets')->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')))->orderByRaw('planned_start_at IS NULL, planned_start_at')->orderBy('plan_code')->get();
@@ -84,6 +88,11 @@ class UpdatePlanController extends Controller
             $plan->fill($data);
 
             $changedCriticalValues = array_intersect_key($oldValues, $plan->getDirty(), array_flip(self::APPROVAL_CRITICAL_FIELDS));
+            if ($changedCriticalValues !== [] && $this->implementationStarted($plan)) {
+                throw ValidationException::withMessages(collect(array_keys($changedCriticalValues))
+                    ->mapWithKeys(fn (string $field) => [$field => '実施開始後は重要な計画項目を変更できません。'])
+                    ->all());
+            }
             $approvals = $changedCriticalValues === [] ? collect() : $plan->validApprovals()->get();
             if ($approvals->isNotEmpty()) {
                 $oldState = $plan->only(['status', 'approver_id', 'blocked_from_status']);
@@ -105,6 +114,19 @@ class UpdatePlanController extends Controller
         });
 
         return back();
+    }
+
+    private function implementationStarted(UpdatePlan $plan): bool
+    {
+        if ($plan->actual_start_at !== null) {
+            return true;
+        }
+        if (in_array($plan->status, self::POST_IMPLEMENTATION_STATES, true)) {
+            return true;
+        }
+
+        return $plan->status === 'BLOCKED'
+            && in_array($plan->blocked_from_status, self::POST_IMPLEMENTATION_STATES, true);
     }
 
     public function transition(Request $r, UpdatePlan $updatePlan, UpdatePlanTransition $service)
