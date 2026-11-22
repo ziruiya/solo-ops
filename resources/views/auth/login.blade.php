@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>MoulinOps ログイン</title>
+    <title>SoloOps ログイン</title>
     <style>
         body {
             font: 16px system-ui;
@@ -41,7 +41,7 @@
 </head>
 <body>
 <main>
-    <h1>MoulinOps ログイン</h1>
+    <h1>SoloOps ログイン</h1>
     <p class="demo">DEMO DATA｜想定環境｜実在企業の構成ではありません</p>
     <form method="post" action="{{ route('login.store') }}">
         @csrf

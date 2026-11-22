@@ -1,4 +1,4 @@
-# MoulinOps
+# SoloOps
 
 ## 01 免責事項
 
@@ -18,9 +18,9 @@
 
 ## 02 Overview
 
-MoulinOps は、少人数の情報システム担当者向けの IT 運用・ライフサイクル・変更管理システムです。業務サービスと稼働コンポーネントを起点に、更新する理由、実施前の判断、作業結果を同じ記録からたどれます。初回の画面案内と確認順は、[面接官向けガイド](docs/INTERVIEW-GUIDE-ja.md)にまとめています。
+SoloOps は、少人数の情報システム担当者向けの IT 運用・ライフサイクル・変更管理システムです。業務サービスと稼働コンポーネントを起点に、更新する理由、実施前の判断、作業結果を同じ記録からたどれます。初回の画面案内と確認順は、[面接官向けガイド](docs/INTERVIEW-GUIDE-ja.md)にまとめています。
 
-## 03 Why MoulinOps
+## 03 Why SoloOps
 
 PHP のサポート期限を確認した後も、どの業務に影響するか、誰が承認するか、どの証拠がそろえば更新してよいかを判断する作業が残ります。そこで実稼働版の確認から、影響調査、独立した承認、復元の検証までを一つの変更計画に結び付けました。引き継ぐ人は保留の理由や復元後の状態を、当時の根拠から確認できます。
 
@@ -133,12 +133,12 @@ Seeder は設定したパスワードをハッシュ化して保存します。�
 
 ```sh
 docker compose exec -T db sh -c 'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mariadb -u root' <<'SQL'
-CREATE DATABASE IF NOT EXISTS moulinops_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-GRANT ALL PRIVILEGES ON moulinops_test.* TO 'moulinops'@'%';
+CREATE DATABASE IF NOT EXISTS soloops_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+GRANT ALL PRIVILEGES ON soloops_test.* TO 'soloops'@'%';
 SQL
 
 docker compose exec -T app composer install --no-interaction --prefer-dist
-docker compose exec -T -e DB_DATABASE=moulinops_test app php artisan test
+docker compose exec -T -e DB_DATABASE=soloops_test app php artisan test
 docker compose exec -T app vendor/bin/phpstan analyse --memory-limit=1G
 docker compose exec -T app vendor/bin/pint --test
 docker compose exec -T app composer audit

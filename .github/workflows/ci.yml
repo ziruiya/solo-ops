@@ -12,10 +12,10 @@ jobs:
         image: mariadb:11
         # CI ephemeral only; this is a disposable workflow database credential.
         env:
-          MARIADB_ROOT_PASSWORD: moulinops_ci_only
-          MARIADB_DATABASE: moulinops
-          MARIADB_USER: moulinops
-          MARIADB_PASSWORD: moulinops_ci_only
+          MARIADB_ROOT_PASSWORD: soloops_ci_only
+          MARIADB_DATABASE: soloops
+          MARIADB_USER: soloops
+          MARIADB_PASSWORD: soloops_ci_only
         ports: [3306:3306]
         options: >-
           --health-cmd="healthcheck.sh --connect --innodb_initialized"
@@ -37,16 +37,16 @@ jobs:
         env:
           DB_HOST: 127.0.0.1
           DB_PORT: 3306
-          DB_DATABASE: moulinops
-          DB_USERNAME: moulinops
-          DB_PASSWORD: moulinops_ci_only
+          DB_DATABASE: soloops
+          DB_USERNAME: soloops
+          DB_PASSWORD: soloops_ci_only
       - run: php artisan test
         env:
           DB_HOST: 127.0.0.1
           DB_PORT: 3306
-          DB_DATABASE: moulinops
-          DB_USERNAME: moulinops
-          DB_PASSWORD: moulinops_ci_only
+          DB_DATABASE: soloops
+          DB_USERNAME: soloops
+          DB_PASSWORD: soloops_ci_only
       - run: vendor/bin/phpstan analyse --memory-limit=1G
       - run: vendor/bin/pint --test
       - run: composer audit

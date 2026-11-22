@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MoulinOps</title>
+<title>SoloOps</title>
 <style>body{font:16px system-ui;max-width:1100px;margin:2rem auto;padding:0 1rem;color:#182334}nav{display:flex;flex-wrap:wrap;gap:1rem;align-items:center;border-bottom:1px solid #ccc;padding:1rem 0}table{width:100%;border-collapse:collapse}td,th{border-bottom:1px solid #ddd;padding:.6rem;text-align:left}input,select,textarea{padding:.5rem;margin:.3rem}button{padding:.5rem 1rem}.demo{background:#fff4d6;padding:.6rem}</style>
 </head>
 <body>

@@ -30,8 +30,8 @@ Reviewer のチェック項目の免除は理由と範囲を記録する操作�
 DB 管理者が実行する付与例です。接続元とアカウント名は配備先に合わせます。
 
 ```sql
-GRANT SELECT, INSERT ON moulinops.work_records TO 'moulinops_runtime'@'app_host';
-GRANT SELECT, INSERT ON moulinops.audit_events TO 'moulinops_runtime'@'app_host';
+GRANT SELECT, INSERT ON soloops.work_records TO 'soloops_runtime'@'app_host';
+GRANT SELECT, INSERT ON soloops.audit_events TO 'soloops_runtime'@'app_host';
 ```
 
 実行用アカウントで接続し、`SHOW GRANTS` でテーブル権限と継承権限を確認します。検証用 DB では両テーブルで `SELECT` とトランザクション内の `INSERT` が通り、`UPDATE ... WHERE 1 = 0` と `DELETE ... WHERE 1 = 0` は権限不足になることを確かめます。

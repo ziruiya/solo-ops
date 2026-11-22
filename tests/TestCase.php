@@ -15,7 +15,7 @@ abstract class TestCase extends BaseTestCase
     {
         parent::setUp();
 
-        $this->systemSettingsPath = sys_get_temp_dir().'/moulinops-settings-'.Str::uuid().'.json';
+        $this->systemSettingsPath = sys_get_temp_dir().'/soloops-settings-'.Str::uuid().'.json';
         $this->app->when(SettingsService::class)->needs('$path')->give($this->systemSettingsPath);
         $this->beforeApplicationDestroyed(fn () => File::delete([$this->systemSettingsPath, $this->systemSettingsPath.'.lock']));
     }
